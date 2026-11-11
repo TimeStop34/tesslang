@@ -1,6 +1,3 @@
-# README.md
-
-```markdown
 # tesslang
 
 A tiny, zero-dependency-on-runtime configuration language for [Tessera](https://github.com/) (and other Aether projects).
