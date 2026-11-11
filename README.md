@@ -64,7 +64,7 @@ serde = { version = "1", features = ["derive"] }
 
 ### Statements
 
-Every statement is on its own line (or separated by `;` if you prefer).
+Every statement is on its own line.
 
 ```hcl
 # 1. Variable declaration (top-level only)
