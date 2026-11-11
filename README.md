@@ -227,7 +227,7 @@ Example error messages:
 ```
 line 3:12: unexpected character: '?'
 line 8:5:  undefined variable: $nope
-expected '=' or '{' after 'gaps', found String("x")
+line 5:10: expected '=' or '{' after 'gaps', found String("x")
 expected number (u32), got Number(3.14)
 ```
 

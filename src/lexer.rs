@@ -51,10 +51,17 @@ impl Lexer {
         Error::at(msg, self.line, self.column)
     }
 
-    pub fn tokenize(mut self) -> Result<Vec<Token>, Error> {
+    /// Возвращает токены и параллельный вектор позиций `(line, column)` —
+    /// позиция каждого токена записывается в момент, когда он начинается.
+    pub fn tokenize(mut self) -> Result<(Vec<Token>, Vec<(usize, usize)>), Error> {
         let mut tokens = Vec::new();
+        let mut positions = Vec::new();
 
         while let Some(c) = self.peek() {
+            let line = self.line;
+            let column = self.column;
+            let before = tokens.len();
+
             match c {
                 ' ' | '\t' | '\r' => {
                     self.bump();
@@ -152,9 +159,14 @@ impl Lexer {
                     return Err(self.error(format!("unexpected character: {other:?}")));
                 }
             }
+
+            if tokens.len() > before {
+                positions.push((line, column));
+            }
         }
 
         tokens.push(Token::Eof);
-        Ok(tokens)
+        positions.push((self.line, self.column));
+        Ok((tokens, positions))
     }
 }

@@ -6,14 +6,15 @@ use crate::Error;
 
 pub struct Parser {
     tokens: Vec<Token>,
+    positions: Vec<(usize, usize)>,
     pos: usize,
     variables: HashMap<String, Value>,
 }
 
 impl Parser {
     pub fn new(input: &str) -> Result<Self, Error> {
-        let tokens = Lexer::new(input).tokenize()?;
-        Ok(Self { tokens, pos: 0, variables: HashMap::new() })
+        let (tokens, positions) = Lexer::new(input).tokenize()?;
+        Ok(Self { tokens, positions, pos: 0, variables: HashMap::new() })
     }
 
     pub fn parse(&mut self) -> Result<Ast, Error> {
@@ -28,6 +29,15 @@ impl Parser {
 
     fn current(&self) -> &Token {
         self.tokens.get(self.pos).unwrap_or(&Token::Eof)
+    }
+
+    fn position(&self) -> (usize, usize) {
+        self.positions.get(self.pos).copied().unwrap_or((0, 0))
+    }
+
+    fn error(&self, message: impl Into<String>) -> Error {
+        let (line, column) = self.position();
+        Error::at(message, line, column)
     }
 
     fn advance(&mut self) {
@@ -47,7 +57,7 @@ impl Parser {
             self.advance();
             Ok(())
         } else {
-            Err(Error::new(format!(
+            Err(self.error(format!(
                 "expected {:?}, found {:?}",
                 expected,
                 self.current()
@@ -81,13 +91,13 @@ impl Parser {
                     self.expect(Token::CloseBrace)?;
                     Ok(Statement::Block(key, inner))
                 } else {
-                    Err(Error::new(format!(
+                    Err(self.error(format!(
                         "expected '=' or '{{' after '{key}', found {:?}",
                         self.current()
                     )))
                 }
             }
-            other => Err(Error::new(format!("unexpected token at start of statement: {other:?}"))),
+            other => Err(self.error(format!("unexpected token at start of statement: {other:?}"))),
         }
     }
 
@@ -106,11 +116,12 @@ impl Parser {
                 Ok(Value::Bool(b))
             }
             Token::Variable(name) => {
+                let (line, column) = self.position();
                 self.advance();
                 self.variables
                     .get(&name)
                     .cloned()
-                    .ok_or_else(|| Error::new(format!("undefined variable: ${name}")))
+                    .ok_or_else(|| Error::at(format!("undefined variable: ${name}"), line, column))
             }
             Token::OpenBracket => {
                 self.advance();
@@ -127,7 +138,7 @@ impl Parser {
                 self.expect(Token::CloseBracket)?;
                 Ok(Value::Array(items))
             }
-            other => Err(Error::new(format!("unexpected token in value: {other:?}"))),
+            other => Err(self.error(format!("unexpected token in value: {other:?}"))),
         }
     }
 }
