@@ -1,6 +1,6 @@
 # tesslang
 
-A tiny, zero-dependency-on-runtime configuration language for [Tessera](https://github.com/) (and other Aether projects).
+A tiny, zero-dependency-on-runtime configuration language for Tessera
 
 `tesslang` is to Tessera what `serde_json` is to JSON: a small crate that turns a text config file into any `serde`-deserializable Rust structure. It has an HCL-inspired syntax — blocks, arrays, `$variables`, comments — and compiles to a plain `Value` tree, which is then handed to `serde` through a hand-written `Deserializer`.
 
@@ -40,6 +40,15 @@ fn main() -> Result<(), tesslang::Error> {
 tesslang = { path = "../tesslang" }
 serde = { version = "1", features = ["derive"] }
 ```
+
+or via git:
+
+```toml
+[dependencies]
+tesslang = { git = "https://github.com/TimeStop34/tesslang" }
+serde = { version = "1", features = ["derive"] }
+```
+
 
 ## Language
 
