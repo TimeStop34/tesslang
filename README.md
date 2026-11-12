@@ -107,7 +107,7 @@ bind = [
     [ $mod, "Return", "exec", $term ],
     [ $mod, "1",      "scroll", -30 ],
     [ $mod, "2",      "scroll",  30 ],
-    [ "$mod CTRL",   "G", "toggle-layout" ],
+    [ "$mod CTRL",    "G", "toggle-layout" ],
 ]
 ```
 
