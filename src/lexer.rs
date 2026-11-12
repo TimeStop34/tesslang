@@ -1,9 +1,15 @@
 use crate::Error;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum StringPart {
+    Literal(String),
+    Var(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Identifier(String),
-    String(String),
+    String(Vec<StringPart>),   // was: String(String)
     Number(f64),
     Bool(bool),
     Variable(String),
@@ -102,25 +108,50 @@ impl Lexer {
                 }
                 '"' => {
                     self.bump();
-                    let mut s = String::new();
+                    let mut parts = Vec::new();
+                    let mut buf = String::new();
                     loop {
                         match self.bump() {
                             Some('"') => break,
                             Some('\\') => match self.bump() {
-                                Some('"') => s.push('"'),
-                                Some('\\') => s.push('\\'),
-                                Some('n') => s.push('\n'),
-                                Some('t') => s.push('\t'),
+                                Some('"') => buf.push('"'),
+                                Some('\\') => buf.push('\\'),
+                                Some('n') => buf.push('\n'),
+                                Some('t') => buf.push('\t'),
+                                Some('$') => buf.push('$'), // literal dollar — do not interpolate
                                 Some(other) => {
                                     return Err(self.error(format!("unknown escape: \\{other}")))
                                 }
                                 None => return Err(self.error("unterminated string")),
                             },
-                            Some(ch) => s.push(ch),
+                            Some('$') => {
+                                let mut name = String::new();
+                                while let Some(c) = self.peek() {
+                                    if c.is_alphanumeric() || c == '_' {
+                                        name.push(c);
+                                        self.bump();
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                if name.is_empty() {
+                                    // bare `$` not followed by an identifier char — keep it literal
+                                    buf.push('$');
+                                } else {
+                                    if !buf.is_empty() {
+                                        parts.push(StringPart::Literal(std::mem::take(&mut buf)));
+                                    }
+                                    parts.push(StringPart::Var(name));
+                                }
+                            }
+                            Some(ch) => buf.push(ch),
                             None => return Err(self.error("unterminated string")),
                         }
                     }
-                    tokens.push(Token::String(s));
+                    if !buf.is_empty() || parts.is_empty() {
+                        parts.push(StringPart::Literal(buf));
+                    }
+                    tokens.push(Token::String(parts));
                 }
                 c if c.is_ascii_digit() || c == '-' => {
                     let mut s = String::new();

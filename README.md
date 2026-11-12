@@ -107,7 +107,7 @@ bind = [
     [ $mod, "Return", "exec", $term ],
     [ $mod, "1",      "scroll", -30 ],
     [ $mod, "2",      "scroll",  30 ],
-    [ $mod, "CTRL",   "G", "toggle-layout" ],
+    [ "$mod CTRL",   "G", "toggle-layout" ],
 ]
 ```
 
@@ -234,7 +234,6 @@ expected number (u32), got Number(3.14)
 ## Limitations (by design)
 
 - **No serialization.** This crate only reads config. No `to_string`, no `Serializer`. Config is not meant to be written back by the program.
-- **No string interpolation.** `$x` is a whole value; it isn't spliced inside `"..."`.
 - **No expressions.** No `1 + 2`, no conditionals, no function calls.
 - **Variables are top-level only.** You cannot declare `$x` inside a block.
 - **Variables must be declared before use.** No forward references.

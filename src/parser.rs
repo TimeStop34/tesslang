@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::ast::{Ast, Statement, Value};
-use crate::lexer::{Lexer, Token};
+use crate::de::format_number;
+use crate::lexer::{Lexer, StringPart, Token};
 use crate::Error;
 
 pub struct Parser {
@@ -103,7 +104,8 @@ impl Parser {
 
     fn parse_value(&mut self) -> Result<Value, Error> {
         match self.current().clone() {
-            Token::String(s) => {
+            Token::String(parts) => {
+                let s = self.interpolate(&parts)?;
                 self.advance();
                 Ok(Value::String(s))
             }
@@ -140,5 +142,30 @@ impl Parser {
             }
             other => Err(self.error(format!("unexpected token in value: {other:?}"))),
         }
+    }
+
+    fn interpolate(&self, parts: &[StringPart]) -> Result<String, Error> {
+        let mut out = String::new();
+        for part in parts {
+            match part {
+                StringPart::Literal(s) => out.push_str(s),
+                StringPart::Var(name) => {
+                    let v = self.variables.get(name).ok_or_else(|| {
+                        self.error(format!("undefined variable: ${name}"))
+                    })?;
+                    match v {
+                        Value::String(s) => out.push_str(s),
+                        Value::Number(n) => out.push_str(&format_number(*n)),
+                        Value::Bool(b) => out.push_str(&b.to_string()),
+                        other => {
+                            return Err(self.error(format!(
+                                "cannot interpolate ${name} of type {other:?} into a string"
+                            )))
+                        }
+                    }
+                }
+            }
+        }
+        Ok(out)
     }
 }

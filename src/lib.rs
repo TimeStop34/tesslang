@@ -219,4 +219,49 @@ mod tests {
         struct U { #[allow(dead_code)] x: u32 }
         assert!(from_str::<U>("x = -3.14").is_err());
     }
+
+    /// `"$var literal"` разворачивается в значение переменной + остаток строки.
+    /// `\$` даёт литеральный доллар и **не** переразворачивается.
+    #[test]
+    fn string_interpolation() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct C {
+            name: String,
+            a: String,
+            b: String,
+            c: String,
+            d: String,
+        }
+
+        let input = r#"
+            $name = "world"
+            name = "test_var"
+            a = "hello $name"
+            b = "value: $name!"
+            c = "\$name is literal"
+            d = "num=$name-bool=$$name"
+        "#;
+        let c: C = from_str(input).unwrap();
+        assert_eq!(c.a, "hello world");
+        assert_eq!(c.b, "value: world!");
+        assert_eq!(c.c, "$name is literal");
+        // `$$name` = literal `$` + interpolation of `$name`
+        assert_eq!(c.d, "num=world-bool=$world");
+    }
+
+    /// Интерполяция уже разрешённых значений не повторяется.
+    #[test]
+    fn no_recursive_interpolation() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        struct C { x: String }
+
+        // `$a` хранит литеральный "$b", `x` подставляет `$a` — но НЕ `$b`.
+        let c: C = from_str(r#"$a = "\$b"
+                            x = "$a""#).unwrap();
+        assert_eq!(c.x, "$b");
+
+        // А вот это — ошибка, `$b` не определён.
+        assert!(from_str::<C>(r#"$a = "$b"
+                                x = "$a""#).is_err());
+    }
 }
