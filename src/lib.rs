@@ -58,7 +58,7 @@ pub fn from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Resu
 
 use serde::de::{Deserialize, Deserializer, Visitor, Error as DeError};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct UnstrictString(pub String);
 
 impl UnstrictString {
