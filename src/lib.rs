@@ -56,6 +56,90 @@ pub fn from_file<T: serde::de::DeserializeOwned>(path: impl AsRef<Path>) -> Resu
     from_str(&content)
 }
 
+use serde::de::{Deserialize, Deserializer, Visitor, Error as DeError};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UnstrictString(pub String);
+
+impl UnstrictString {
+    pub fn into_inner(self) -> String { self.0 }
+}
+impl From<String>      for UnstrictString { fn from(s: String) -> Self { Self(s) } }
+impl From<&str>        for UnstrictString { fn from(s: &str)    -> Self { Self(s.to_string()) } }
+impl fmt::Display      for UnstrictString { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.0.fmt(f) } }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum IntegerOrPercent {
+    /// Обычное число, напр. `60`.
+    Integer(f64),
+    /// Проценты, напр. `60%` → `Percent(0.6)` (доля, не «60»).
+    Percent(f64),
+}
+
+impl IntegerOrPercent {
+    pub fn as_f64(&self) -> f64 {
+        match self { Self::Integer(n) => *n, Self::Percent(p) => *p }
+    }
+}
+
+impl<'de> Deserialize<'de> for UnstrictString {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = UnstrictString;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a string, number, boolean, or percentage")
+            }
+            fn visit_str<E: DeError>(self, v: &str)    -> Result<Self::Value, E> { Ok(UnstrictString(v.into())) }
+            fn visit_string<E: DeError>(self, v: String) -> Result<Self::Value, E> { Ok(UnstrictString(v)) }
+            fn visit_bool<E: DeError>(self, v: bool)   -> Result<Self::Value, E> { Ok(UnstrictString(v.to_string())) }
+            fn visit_i64<E: DeError>(self, v: i64)     -> Result<Self::Value, E> { Ok(UnstrictString(v.to_string())) }
+            fn visit_u64<E: DeError>(self, v: u64)     -> Result<Self::Value, E> { Ok(UnstrictString(v.to_string())) }
+            fn visit_f64<E: DeError>(self, v: f64)     -> Result<Self::Value, E> {
+                Ok(UnstrictString(crate::de::format_number(v)))
+            }
+        }
+        d.deserialize_any(V)
+    }
+}
+
+impl<'de> Deserialize<'de> for IntegerOrPercent {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = IntegerOrPercent;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("an integer or a percentage (e.g. 60 or 60%)")
+            }
+            fn visit_f64<E: DeError>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(IntegerOrPercent::Integer(v))
+            }
+            fn visit_i64<E: DeError>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(IntegerOrPercent::Integer(v as f64))
+            }
+            fn visit_u64<E: DeError>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(IntegerOrPercent::Integer(v as f64))
+            }
+            fn visit_str<E: DeError>(self, v: &str) -> Result<Self::Value, E> {
+                self.visit_string(v.to_string())
+            }
+            fn visit_string<E: DeError>(self, v: String) -> Result<Self::Value, E> {
+                if let Some(num) = v.strip_suffix('%') {
+                    let n: f64 = num.parse().map_err(|_| {
+                        E::custom(format!("invalid percent value: {v:?}"))
+                    })?;
+                    Ok(IntegerOrPercent::Percent(n / 100.0))
+                } else {
+                    Err(E::custom(format!(
+                        "expected integer or percentage (e.g. 60 or 60%), got string {v:?}"
+                    )))
+                }
+            }
+        }
+        d.deserialize_any(V)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,8 +9,9 @@ pub enum StringPart {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Identifier(String),
-    String(Vec<StringPart>),   // was: String(String)
+    String(Vec<StringPart>),
     Number(f64),
+    Percent(f64),
     Bool(bool),
     Variable(String),
     OpenBrace,
@@ -165,10 +166,18 @@ impl Lexer {
                             break;
                         }
                     }
-                    let n: f64 = s
-                        .parse()
-                        .map_err(|_| self.error(format!("invalid number: {s}")))?;
-                    tokens.push(Token::Number(n));
+                    let n: f64 = s.parse().map_err(|_| self.error(format!("invalid number: {s}")))?;
+                    if self.peek() == Some('%') {
+                        self.bump();
+                        tokens.push(Token::Percent(n));
+                    } else {
+                        tokens.push(Token::Number(n));
+                    }
+                }
+                '%' => {
+                    return Err(self.error(
+                        "percent sign '%' must directly follow a number (e.g. 60%)",
+                    ));
                 }
                 c if c.is_alphabetic() || c == '_' => {
                     let mut s = String::new();

@@ -18,15 +18,27 @@ macro_rules! deserialize_int {
                 {
                     visitor.$visit(n as $ty)
                 }
+                Value::Percent(n) => {
+                    let f = n / 100.0;
+                    if f.fract() == 0.0
+                        && f >= <$ty>::MIN as f64
+                        && f <= <$ty>::MAX as f64
+                    {
+                        visitor.$visit(f as $ty)
+                    } else {
+                        Err(Error::new(format!(
+                            "percent {}% does not map to {}",
+                            n, stringify!($ty)
+                        )))
+                    }
+                }
                 Value::Number(n) => Err(Error::new(format!(
                     "number {} out of range for {}",
-                    n,
-                    stringify!($ty)
+                    n, stringify!($ty)
                 ))),
                 other => Err(Error::new(format!(
                     "expected number ({}), got {:?}",
-                    stringify!($ty),
-                    other
+                    stringify!($ty), other
                 ))),
             }
         }
@@ -38,25 +50,39 @@ impl<'de> Deserializer<'de> for Value {
 
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match self {
-            Value::Bool(b) => visitor.visit_bool(b),
-            Value::Number(n) => visitor.visit_f64(n),
-            Value::String(s) => visitor.visit_string(s),
-            Value::Array(v) => visitor.visit_seq(Seq { iter: v.into_iter() }),
-            Value::Object(m) => visitor.visit_map(Map {
-                iter: m.into_iter(),
-                value: None,
-            }),
+            Value::Bool(b)    => visitor.visit_bool(b),
+            Value::Number(n)  => visitor.visit_f64(n),
+            // маркер для IntegerOrPercent: строка с '%'
+            Value::Percent(n) => visitor.visit_string(format!("{}%", format_number(n))),
+            Value::String(s)  => visitor.visit_string(s),
+            Value::Array(v)   => visitor.visit_seq(Seq { iter: v.into_iter() }),
+            Value::Object(m)  => visitor.visit_map(Map { iter: m.into_iter(), value: None }),
         }
     }
 
     fn deserialize_string<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match self {
-            Value::String(s) => visitor.visit_string(s),
-            // В конфиге типа `bind` числа встречаются в массиве строк:
-            // [ $mod, "1", "scroll", -30 ] -> Vec<String>. Конвертируем.
-            Value::Number(n) => visitor.visit_string(format_number(n)),
-            Value::Bool(b) => visitor.visit_string(b.to_string()),
+            Value::String(s)  => visitor.visit_string(s),
+            Value::Number(n)  => visitor.visit_string(format_number(n)),
+            Value::Percent(n) => visitor.visit_string(format!("{}%", format_number(n))),
+            Value::Bool(b)    => visitor.visit_string(b.to_string()),
             other => Err(Error::new(format!("expected string, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self {
+            Value::Number(n)  => visitor.visit_f32(n as f32),
+            Value::Percent(n) => visitor.visit_f32((n / 100.0) as f32),
+            other => Err(Error::new(format!("expected f32, got {other:?}"))),
+        }
+    }
+
+    fn deserialize_f64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self {
+            Value::Number(n)  => visitor.visit_f64(n),
+            Value::Percent(n) => visitor.visit_f64(n / 100.0),
+            other => Err(Error::new(format!("expected f64, got {other:?}"))),
         }
     }
 
@@ -89,20 +115,6 @@ impl<'de> Deserializer<'de> for Value {
     deserialize_int!(deserialize_u16, u16, visit_u16);
     deserialize_int!(deserialize_u32, u32, visit_u32);
     deserialize_int!(deserialize_u64, u64, visit_u64);
-
-    fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self {
-            Value::Number(n) => visitor.visit_f32(n as f32),
-            other => Err(Error::new(format!("expected f32, got {other:?}"))),
-        }
-    }
-
-    fn deserialize_f64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self {
-            Value::Number(n) => visitor.visit_f64(n),
-            other => Err(Error::new(format!("expected f64, got {other:?}"))),
-        }
-    }
 
     serde::forward_to_deserialize_any! {
         bool char str bytes byte_buf unit unit_struct seq tuple

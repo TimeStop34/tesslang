@@ -8,6 +8,7 @@ use crate::Error;
 pub enum Value {
     String(String),
     Number(f64),
+    Percent(f64),
     Bool(bool),
     Array(Vec<Value>),
     Object(HashMap<String, Value>),
@@ -32,7 +33,7 @@ impl Ast {
     }
 }
 
-fn statements_to_map(statements: Vec<Statement>) -> Result<HashMap<String, Value>, Error> {
+pub(crate) fn statements_to_map(statements: Vec<Statement>) -> Result<HashMap<String, Value>, Error> {
     let mut map = HashMap::new();
     for stmt in statements {
         match stmt {

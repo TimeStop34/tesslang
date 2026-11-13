@@ -19,14 +19,11 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<Ast, Error> {
-        let mut statements = Vec::new();
-        self.skip_newlines();
-        while self.current() != &Token::Eof {
-            statements.push(self.parse_statement()?);
-            self.skip_newlines();
-        }
+        let statements = self.parse_statements_until(Token::Eof)?;
         Ok(Ast { statements })
     }
+
+    // ---- helpers (были потеряны при редактировании) ----
 
     fn current(&self) -> &Token {
         self.tokens.get(self.pos).unwrap_or(&Token::Eof)
@@ -66,6 +63,32 @@ impl Parser {
         }
     }
 
+    // ---- грамматика ----
+
+    /// Разбирает последовательность statement'ов до `close`.
+    /// Один и тот же код обслуживает:
+    ///   * корень файла (`close = Eof`),
+    ///   * блок `key { ... }`,
+    ///   * инлайн-объект `{ ... }` внутри значения.
+    /// Запятая — необязательный разделитель после statement'а,
+    /// новые строки тоже работают как разделитель.
+    fn parse_statements_until(&mut self, close: Token) -> Result<Vec<Statement>, Error> {
+        let mut stmts = Vec::new();
+        self.skip_newlines();
+        while self.current() != &close && self.current() != &Token::Eof {
+            stmts.push(self.parse_statement()?);
+            self.skip_newlines();
+            if self.current() == &Token::Comma {
+                self.advance();
+                self.skip_newlines();
+            }
+        }
+        if close != Token::Eof {
+            self.expect(close)?;
+        }
+        Ok(stmts)
+    }
+
     fn parse_statement(&mut self) -> Result<Statement, Error> {
         match self.current().clone() {
             Token::Variable(name) => {
@@ -83,13 +106,7 @@ impl Parser {
                     Ok(Statement::Assignment(key, value))
                 } else if self.current() == &Token::OpenBrace {
                     self.advance();
-                    let mut inner = Vec::new();
-                    self.skip_newlines();
-                    while self.current() != &Token::CloseBrace && self.current() != &Token::Eof {
-                        inner.push(self.parse_statement()?);
-                        self.skip_newlines();
-                    }
-                    self.expect(Token::CloseBrace)?;
+                    let inner = self.parse_statements_until(Token::CloseBrace)?;
                     Ok(Statement::Block(key, inner))
                 } else {
                     Err(self.error(format!(
@@ -98,7 +115,9 @@ impl Parser {
                     )))
                 }
             }
-            other => Err(self.error(format!("unexpected token at start of statement: {other:?}"))),
+            other => Err(self.error(format!(
+                "unexpected token at start of statement: {other:?}"
+            ))),
         }
     }
 
@@ -113,6 +132,10 @@ impl Parser {
                 self.advance();
                 Ok(Value::Number(n))
             }
+            Token::Percent(n) => {
+                self.advance();
+                Ok(Value::Percent(n))
+            }
             Token::Bool(b) => {
                 self.advance();
                 Ok(Value::Bool(b))
@@ -120,10 +143,9 @@ impl Parser {
             Token::Variable(name) => {
                 let (line, column) = self.position();
                 self.advance();
-                self.variables
-                    .get(&name)
-                    .cloned()
-                    .ok_or_else(|| Error::at(format!("undefined variable: ${name}"), line, column))
+                self.variables.get(&name).cloned().ok_or_else(|| {
+                    Error::at(format!("undefined variable: ${name}"), line, column)
+                })
             }
             Token::OpenBracket => {
                 self.advance();
@@ -139,6 +161,11 @@ impl Parser {
                 }
                 self.expect(Token::CloseBracket)?;
                 Ok(Value::Array(items))
+            }
+            Token::OpenBrace => {
+                self.advance();
+                let stmts = self.parse_statements_until(Token::CloseBrace)?;
+                Ok(Value::Object(crate::ast::statements_to_map(stmts)?))
             }
             other => Err(self.error(format!("unexpected token in value: {other:?}"))),
         }
